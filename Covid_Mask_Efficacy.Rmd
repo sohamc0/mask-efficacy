@@ -1,0 +1,177 @@
+---
+title: "Mask Efficacy by State"
+output:
+  html_document:
+    df_print: paged
+Authors: Soham Choudhury, Kyuyoung Kim
+UID: 116892896, 116280136
+---
+
+
+
+```{r}
+library(dplyr)
+library(ggplot2)
+library(tidyverse)
+library(janitor)
+library(gganimate)
+library(gifski)
+library(png)
+library(ggrepel)
+library(scales)
+library(janitor)
+library(maps)
+
+path <- "time_series_covid19_confirmed_US.csv"
+
+df<- read.csv(path)
+head(df)
+
+covid_full <- df %>% select(c(7, 12:297)) 
+
+covid_states <- covid_full %>% group_by(Province_State) %>% #adding up all the county-level numbers 
+  summarize_at(vars(2:286), sum) %>% adorn_totals('row')
+covid_states$Province_State <- tolower(covid_states$Province_State)
+
+#unique(covid_map_full$Province_State)
+us_states <- map_data("state")
+cont_states <- unique(us_states$region) #contiguous states in US
+
+#get information about contiguous states
+covid_cont_states <- covid_states %>% 
+  filter(Province_State %in%  cont_states) %>% 
+  dplyr::rename(region = Province_State)
+
+col_names<- colnames(covid_cont_states)[c(2:286)]
+new_col_names <- seq(as.Date("2020/1/21"), by = "day", length.out = 286) #get dates in date-time format
+
+covid_cont_states <- covid_cont_states %>% 
+  setNames(new_col_names) %>%
+  dplyr::rename(region = "2020-01-21")
+
+#Prepare data for plotting
+covid_cont_state.long <- pivot_longer(covid_cont_states, 
+                                      cols = c(2:286), 
+                                      names_to = "date", 
+                                      values_to = "cases")
+  
+#Choose states to plot
+plot_ny <- c("new york")
+plot_states <- c("alabama", "alaska", "arizona", "arkansas", "california", "colorado", 
+                 "connecticut", "delaware", "florida", "georgia", "hawaii", "idaho", 
+                 "illinois", "indiana", "iowa", "kansas", "kentucky", "louisiana",
+                 "maine", "maryland", "massachusetts", "michigan", "minnesota", 
+                 "mississippi", "missouri", "montana", "nebraska", "nevada", 
+                 "new hampshire", "new jersey", "new mexico", "new york", 
+                 "north carolina", "north dakota", "ohio", "oklahoma", "oregon", 
+                 "pennsylvania", "rhode island", "south carolina", "south dakota", 
+                 "tennessee", "texas", "utah", "vermont", "virginia", "washington", 
+                 "west virginia", "wisconsin", "wyoming")
+
+#data for plotting specific states
+covid_plot_data <- covid_cont_state.long %>% filter(region == plot_states)
+covid_data_ny <- covid_cont_state.long %>% filter(region == plot_ny)
+covid_data_md <- covid_cont_state.long %>% filter(region == "maryland")
+
+###############################################
+######Plot the data ##########################
+###############################################
+
+#This is the basic plot 
+plot_static <- covid_plot_data %>% 
+  ggplot(aes(x = as.Date(date), 
+             y = cases, 
+             group = region,
+             color = region))+
+  labs(title = "Efficacy of Mandating Masks",
+       subtitle = "Kyuyoung Kim, Soham Choudhury, University of Maryland, College Park.",
+       x = "Date", 
+       y = "Number of Cases")+
+  geom_line()+
+  scale_x_date(limits = as.Date(c("2020-1-22","2020-11- 02")), 
+               date_breaks = "1 month",
+               date_labels="%B")+
+  scale_y_continuous(labels = scales::comma)+
+  theme(
+    plot.title = element_text(color="black", size=14, face="bold.italic"),
+    axis.title.x = element_text(color="black", size=10),
+    axis.title.y = element_text(color="black", size=10))+
+  facet_grid(~region)
+
+plot_static
+
+
+#This plot is to be used when making animations
+plot_anim <- covid_plot_data %>% 
+  ggplot(aes(x = as.Date(date), 
+             y = cases, 
+             group = region,
+             color = region))+
+  labs(title = "Efficacy of Mandating Masks",
+       subtitle = "Kyuyoung Kim, Soham Choudhury, University of Maryland, College Park.",
+       x = "Date", 
+       y = "Number of Cases")+
+  geom_line()+
+  geom_point()+
+  geom_text(aes(label = factor(region)), 
+            hjust = 0, 
+            position = position_dodge(width=0.9),  
+            size=4)+
+  scale_x_date(limits = as.Date(c("2020-1-22","2020-11- 02")), 
+               date_breaks = "1 month",
+               date_labels="%B")+
+  scale_y_continuous(labels = scales::comma)+
+  theme(
+    plot.title = element_text(color="black", size=14, face="bold.italic"),
+    axis.title.x = element_text(color="black", size=10),
+    axis.title.y = element_text(color="black", size=10),
+    legend.position = "none") #+ facet_grid(~region) use facet grid if you want separate plots
+
+plot_anim 
+
+#to compute the animation
+plot_anim <- plot_anim +  theme(
+  #panel.background = element_rect(fill = "white"),
+  plot.margin = margin(5,10 ,5, 1, "mm"),
+  plot.background = element_rect(
+    fill = "white",
+    colour = "black",
+    size = 1
+  )
+)
+
+plot_anim <- plot_anim +transition_reveal(as.Date(date))
+### render animation 
+plot_anim <- animate(plot_anim,
+                       width = 750, 
+                       height = 650,
+                       duration = 20,
+                       end_pause = 20,
+                       renderer = gifski_renderer())
+
+plot_anim
+```
+
+
+
+```{r}
+###################### Mask vs. No Mask graph #################################
+
+
+mask_mandated <- c(11.0433333,	10.4933333,	12.91,	6.0466667	,9.7266667)
+no_mask <- c(14.23157895	,16.56842105,	9.847368421,	15.61578947,	10.06842105)
+
+
+plot(mask_mandated,type = "o",col = "green", xlab = "Week # after 2 weeks of mandate", ylab = "percentage of cases on one day", 
+     main = "Mask Efficacy through State Mandates", ylim = c(5,20))
+
+lines(no_mask, type = "o", col = "red")
+
+legend(1, 9, legend=c("Mask Mandate", "No Mask Mandate"),
+       col=c("green", "red"), lty=1:2, cex=0.8)
+```
+Conclusion:
+  Our hypothesis was that we think that states that mandate masks will see lower infection rates than states that do not mandate masks. We created our data by first finding the best dates for each state by using the date two weeks after masks were mandated as the CDC stated results of mask mandates were seen after two weeks. 
+  For states that never implemented a mask mandate or mandated masks too late (not enough data for those that mandated it in late November) we chose to start the first week of July as a good mid data range for coronavirus testing. 
+  Then we calculated our data points by subtracting the confirmed cases of the day by the day before's confirmed cases then dividing everything by the number of tests administered that day subtracted by the tests administered the day before. 
+  Then we found the averages of all the states that mandated masks and all the states that did not mandate mask then created a graph with the two lines. The graph and data both confirm our hypothesis as the graph, although not consistently, shows higher rates of confirmed cases for the no states than the yes states.
